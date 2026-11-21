@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{DA8BF88E-6C3E-4E4E-A074-1C26CB646702}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloSud.Api", "src\HelloSud.Api\HelloSud.Api.csproj", "{6CB5D4EA-BA44-48FE-94FA-D3E231E4FCD1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{57FABF42-6DE5-4402-AD89-7FFD8F6EBA67}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmokeTests", "tests\SmokeTests\SmokeTests.csproj", "{FB053EDD-BED1-4AB8-963D-086AA46039EB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6CB5D4EA-BA44-48FE-94FA-D3E231E4FCD1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6CB5D4EA-BA44-48FE-94FA-D3E231E4FCD1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6CB5D4EA-BA44-48FE-94FA-D3E231E4FCD1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6CB5D4EA-BA44-48FE-94FA-D3E231E4FCD1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB053EDD-BED1-4AB8-963D-086AA46039EB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB053EDD-BED1-4AB8-963D-086AA46039EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB053EDD-BED1-4AB8-963D-086AA46039EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB053EDD-BED1-4AB8-963D-086AA46039EB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{6CB5D4EA-BA44-48FE-94FA-D3E231E4FCD1} = {DA8BF88E-6C3E-4E4E-A074-1C26CB646702}
+		{FB053EDD-BED1-4AB8-963D-086AA46039EB} = {57FABF42-6DE5-4402-AD89-7FFD8F6EBA67}
+	EndGlobalSection
+EndGlobal

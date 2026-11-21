@@ -1,0 +1,28 @@
+name: Build and HTTP tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet build HelloSud.sln -c Release
+      - name: Run HTTP tests
+        shell: bash
+        run: |
+          export APP_ID=ci-test-app
+          export APP_SECRET="$(openssl rand -hex 32)"
+          export ASPNETCORE_URLS=http://127.0.0.1:8000
+          dotnet src/HelloSud.Api/bin/Release/net8.0/HelloSud.Api.dll > /tmp/sud-demo.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8000/health
+          dotnet run --project tests/SmokeTests -c Release --no-build
