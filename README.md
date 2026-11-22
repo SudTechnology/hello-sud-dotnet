@@ -55,7 +55,7 @@ dotnet run --project src/HelloSud.Api
 
 These credentials are for isolated local testing. Keep the terminal running and press Ctrl+C to stop. If your SDK is installed at `~/.dotnet` and `dotnet` is not on PATH, use `~/.dotnet/dotnet` instead.
 
-Check the server at `http://127.0.0.1:8000/health`, which returns `{"status":"ok"}`. There is no homepage at `/`; use the API paths below.
+Check the server at `http://127.0.0.1:8000/health`, which returns `{"ret_code":0,"ret_msg":"","sdk_error_code":0,"data":{"status":"ok"}}`. There is no homepage at `/`; use the API paths below.
 
 ### Docker
 
@@ -177,6 +177,42 @@ The complete `Program.cs` also reads JSON request bodies, handles malformed
 requests, and calls `app.Run()`. The excerpts above explain the integration
 points rather than replacing the full server implementation.
 
+## Optional Callback Signature Verification
+
+> **IMPORTANT — Verify the original request body BEFORE deserialization or conversion.**
+> Use the exact bytes received from the request input stream. Never parse JSON, bind a DTO,
+> serialize an object back to JSON, trim whitespace, reorder fields, normalize line endings,
+> or decode/re-encode the body before verification. Equivalent JSON values can have different
+> signed bytes. This check is intended to detect changes to the received body.
+
+Set `VERIFY_CALLBACK_SIGNATURE=true` to enable verification. The default is `false`.
+When enabled, all `/api/**` callbacks, including `getSSToken` and `updateSSToken`, are checked
+before routing or JSON parsing. `/api/getCode` and `/health` are excluded. Production applications
+must authenticate callers of `getCode` through their own user authentication system.
+
+The required headers are `Sud-AppId`, `Sud-Timestamp`, `Sud-Nonce`, and `Sud-Signature`.
+The application ID must match `APP_ID`. Calculate lowercase hexadecimal HMAC-SHA1 with
+`APP_SECRET` as the UTF-8 key over:
+
+```text
+app_id\n
+timestamp\n
+nonce\n
+original_request_body\n
+```
+
+**Include the final newline**, even for an empty body. Append that protocol newline without
+removing or modifying any newline already in the body. Missing or invalid signatures return
+HTTP 403 with `ret_code: 1`, `sdk_error_code: 0`, and `data: {}`.
+
+Processing order: **capture original bytes → verify signature → parse the unchanged bytes →
+validate inputs → call the SDK**. Callback verification does not replace Code/SSToken verification.
+For example, `{"code":"abc"}` and `{ "code": "abc" }` must produce different signatures.
+
+The documented recipe does not sign the URL, method, or query parameters. This demo does not
+implement a timestamp freshness window or nonce replay store. Local tests are not a substitute
+for integration testing with issued credentials and the remote service.
+
 ## API Reference
 
 All POST requests require `Content-Type: application/json`. Successful authentication responses use HTTP 200; validation failures use HTTP 400. Expiration timestamps are Unix milliseconds.
@@ -288,37 +324,36 @@ Common SDK error codes:
 - `1004`: Verified token is missing a usable UID in this demo.
 - `1005`: Token has expired.
 
-Missing parameters, invalid JSON, and unsupported request content types return HTTP 400. Unknown paths return HTTP 404. Unexpected exceptions return HTTP 500 without exposing exception details. Missing application configuration or a short secret prevents startup.
+Missing parameters, invalid JSON, and unsupported request content types return HTTP 400. Unknown paths return HTTP 404, and wrong HTTP methods return HTTP 405. Unknown JSON fields remain compatible. Unexpected exceptions return HTTP 500 without exposing exception details. Missing application configuration or a short secret prevents startup.
 
 ## Testing
 
-With the server running, execute this from the project root in a second terminal:
+The complete HTTP test suite uses Python 3's standard library and passes tokens automatically.
+Start the server, then run in another terminal:
 
 ```bash
-dotnet run --project tests/SmokeTests -- http://127.0.0.1:8000
+export VERIFY_CALLBACK_SIGNATURE=false
+python3 tests/http_smoke.py http://127.0.0.1:8000
 ```
 
-The test automatically passes tokens between requests and does not print them. It checks:
-
-- Code generation.
-- Code exchange and UID retrieval.
-- SSToken refresh with a later expiration time.
-- Invalid Code rejection.
-- Invalid SSToken rejection.
-- Missing UID rejection.
-- Missing Code rejection.
-- Malformed JSON rejection.
-
-Expected output: eight `PASS` lines, followed by `All HTTP smoke tests passed. Tokens were not printed.` Failures exit with a nonzero status. These checks validate the local API flow, not remote-service integration.
-
-If you run the server in Docker without a local SDK, run the tests in an SDK container:
+To verify signed callbacks, restart the server with `VERIFY_CALLBACK_SIGNATURE=true` and run:
 
 ```bash
-docker run --rm --network container:hello-sud-dotnet-test \
-  --mount "type=bind,source=$PWD,target=/src" -w /src \
-  mcr.microsoft.com/dotnet/sdk:8.0 \
-  dotnet run --project tests/SmokeTests -- http://127.0.0.1:8000
+export VERIFY_CALLBACK_SIGNATURE=true
+# Set APP_ID and APP_SECRET to exactly the same values as the running server.
+python3 tests/http_smoke.py http://127.0.0.1:8000
 ```
+
+The test process reads credentials from environment variables, not interactive input or `.env`.
+Changing test-terminal variables does not change an already running server. If port 8000 is used
+by another demo, choose a different port and pass that URL to the script.
+
+Both modes exercise Code generation, exchange, mock profiles, refresh, malformed tokens,
+missing and wrong-type inputs, malformed JSON, unknown fields, and route/method errors.
+Signed mode also checks missing headers, wrong app ID or key, altered signatures, and changes
+to spaces and CRLF line endings. The same altered bytes succeed when correctly re-signed.
+Tests print PASS messages and exit nonzero on failure; secrets and tokens are not printed.
+GitHub Actions runs both modes using temporary local test credentials.
 
 ## Project Structure
 
@@ -326,9 +361,11 @@ docker run --rm --network container:hello-sud-dotnet-test \
 hello-sud-dotnet/
 ├── src/
 │   └── HelloSud.Api/
+│       ├── CallbackSignatureMiddleware.cs # Raw-body verification
 │       ├── Program.cs                 # HTTP endpoints and configuration
 │       └── HelloSud.Api.csproj        # NuGet SDK reference
 ├── tests/
+│   ├── http_smoke.py                 # Signed and unsigned HTTP checks
 │   └── SmokeTests/
 │       ├── Program.cs                 # Automated HTTP tests
 │       └── SmokeTests.csproj
@@ -349,7 +386,7 @@ Refreshing issues a new token for the same UID; it does not revoke the old token
 
 ## Continuous Integration
 
-GitHub Actions restores the NuGet package, builds the solution, starts the API with temporary test credentials, and runs the HTTP smoke tests.
+GitHub Actions restores the NuGet package, builds the solution, starts the API with temporary test credentials, and runs the HTTP smoke tests with callback verification disabled and enabled.
 
 ## References
 

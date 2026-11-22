@@ -5,14 +5,21 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        verify: ['false', 'true']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
       - run: dotnet build HelloSud.sln -c Release
-      - name: Run HTTP tests
-        shell: bash
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Test callback and SDK flows
+        env:
+          VERIFY_CALLBACK_SIGNATURE: ${{ matrix.verify }}
         run: |
           export APP_ID=ci-test-app
           export APP_SECRET="$(openssl rand -hex 32)"
@@ -24,5 +31,5 @@ jobs:
             if curl -fsS http://127.0.0.1:8000/health >/dev/null; then break; fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:8000/health
-          dotnet run --project tests/SmokeTests -c Release --no-build
+          curl -fsS http://127.0.0.1:8000/health >/dev/null
+          python3 tests/http_smoke.py http://127.0.0.1:8000
