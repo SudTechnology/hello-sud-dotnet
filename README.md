@@ -1,13 +1,13 @@
 # SudGIP Auth Server Demo
 
-A lightweight .NET 8 HTTP server demo for SudGIP authentication services. This project implements authentication APIs with ASP.NET Core Minimal APIs and the **Sud.Gip.Auth 1.0.0** NuGet package.
+A lightweight .NET 8 HTTP server demo for SudGIP authentication services. This project implements authentication APIs with ASP.NET Core Minimal APIs and the **Sud.Gip.Auth 1.1.0** NuGet package.
 
 Use this demo to learn how to initialize the SDK and build authentication endpoints in your own server.
 
 ## Prerequisites
 
 - .NET 8 SDK for local development.
-- Sud.Gip.Auth 1.0.0, automatically restored from NuGet.
+- Sud.Gip.Auth 1.1.0, automatically restored from NuGet.
 - Alternatively, Docker with its engine running; a local .NET installation is not required for the Docker workflow.
 
 ## Installation
@@ -179,7 +179,7 @@ static IResult Success(object data) => Results.Json(new {
 
 static IResult Error(string message, int code = 0) => Results.Json(new {
     ret_code = 1, ret_msg = message, sdk_error_code = code, data = new { }
-}, statusCode: 400);
+}, statusCode: code == 0 ? 400 : 200);
 ```
 
 The complete `Program.cs` also reads JSON request bodies, handles malformed
@@ -224,7 +224,7 @@ for integration testing with issued credentials and the remote service.
 
 ## API Reference
 
-All POST requests require `Content-Type: application/json`. Successful authentication responses use HTTP 200; validation failures use HTTP 400. Expiration timestamps are Unix milliseconds.
+All POST requests require `Content-Type: application/json`. Successful responses and SDK token validation failures use HTTP 200; malformed request parameters use HTTP 400. Always inspect `ret_code` and `sdk_error_code`. Expiration timestamps are Unix milliseconds.
 
 ### 1. getCode (GET)
 
@@ -417,4 +417,33 @@ GitHub Actions restores the NuGet package, builds the solution, starts the API w
 ## References
 
 - SDK source: https://github.com/SudTechnology/sud-gip-auth-dotnet
-- NuGet package: https://www.nuget.org/packages/Sud.Gip.Auth/1.0.0
+- NuGet package: https://www.nuget.org/packages/Sud.Gip.Auth/1.1.0
+
+
+### SDK-based Callback Verification
+
+The demo uses `Sud.Gip.Auth` 1.1.0. `CallbackSignatureMiddleware` reads the original
+body into a byte array and delegates verification to `RequestSigner.VerifySignature`.
+The SDK owns signature calculation and constant-time digest comparison; the demo
+owns header extraction, duplicate-header rejection, routing, and the verification
+switch. `getCode` and `health` remain exempt. Verify before JSON parsing.
+
+**Never deserialize/re-serialize, trim, normalize whitespace or CRLF, change text
+encoding, or decompress the original body before verification.** Outgoing API
+requests can use `GenerateSignature` or `GenerateAuthorization`; serialize once,
+sign the resulting bytes, and transmit those same bytes. Callback requests use
+`Sud-*` headers; outgoing API requests use the `Sud-Auth` Authorization value.
+
+### Expired Code and Token Errors
+
+An expired Code sent to `getSSToken` returns **HTTP 200**:
+
+```json
+{"ret_code": 1, "ret_msg": "", "sdk_error_code": 1005, "data": {}}
+```
+
+Other token validation failures also return HTTP 200 with `ret_code: 1` and their
+SDK error code (for example 1002 for an invalid token). The same contract applies
+to expired SSTokens sent to `updateSSToken`. Check the JSON fields, not HTTP status
+alone. Obtain a new Code instead of retrying an expired one. Invalid parameters
+remain HTTP 400, callback signature failures HTTP 403, and unexpected errors HTTP 500.

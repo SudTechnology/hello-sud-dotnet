@@ -15,7 +15,7 @@ var refreshed = await Read(await client.PostAsJsonAsync("/api/updateSSToken", ne
 Check(refreshed.Status == 200 && refreshed.Json.GetProperty("data").GetProperty("expire_date").GetDecimal() > token.Json.GetProperty("data").GetProperty("expire_date").GetDecimal(), "Refresh SSToken");
 foreach (var pair in new[] { ("/api/getSSToken", "code"), ("/api/updateSSToken", "ss_token") }) {
     var bad = await Read(await client.PostAsJsonAsync(pair.Item1, new Dictionary<string,string>{{pair.Item2,"invalid-token"}}));
-    Check(bad.Status == 400 && bad.Json.GetProperty("sdk_error_code").GetInt32() == 1002, "Reject invalid token: " + pair.Item1);
+    Check(bad.Status == 200 && bad.Json.GetProperty("ret_code").GetInt32() == 1 && bad.Json.GetProperty("sdk_error_code").GetInt32() == 1002, "Reject invalid token: " + pair.Item1);
 }
 var missing = await Read(await client.GetAsync("/api/getCode"));
 Check(missing.Status == 400, "Missing UID");

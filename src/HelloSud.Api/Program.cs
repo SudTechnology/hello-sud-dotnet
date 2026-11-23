@@ -9,6 +9,7 @@ var secret = builder.Configuration["APP_SECRET"];
 if (string.IsNullOrWhiteSpace(appId) || secret is null || Encoding.UTF8.GetByteCount(secret) < 32)
     throw new InvalidOperationException("Set APP_ID and APP_SECRET (at least 32 UTF-8 bytes) before starting.");
 builder.Services.AddSingleton(new SudGIPAuth(appId, secret));
+builder.Services.AddSingleton(new RequestSigner(appId, secret));
 // Reject an invalid switch instead of silently disabling callback verification.
 _ = builder.Configuration.GetValue<bool>("VERIFY_CALLBACK_SIGNATURE");
 var app = builder.Build();
@@ -119,7 +120,8 @@ app.MapFallback((HttpContext context) =>
 app.Run();
 
 static IResult Success(object data) => Results.Json(new { ret_code = 0, ret_msg = "", sdk_error_code = 0, data });
-static IResult Error(string message, int code = 0) => Results.Json(new { ret_code = 1, ret_msg = message, sdk_error_code = code, data = new { } }, statusCode: 400);
+// SDK business errors use HTTP 200; clients must inspect ret_code and sdk_error_code.
+static IResult Error(string message, int code = 0) => Results.Json(new { ret_code = 1, ret_msg = message, sdk_error_code = code, data = new { } }, statusCode: code == 0 ? 400 : 200);
 // Called only after callback middleware has verified and rewound the original body.
 static async Task<string?> ReadField(HttpRequest request, string name)
 {

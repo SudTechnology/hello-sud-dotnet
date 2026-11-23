@@ -4,6 +4,7 @@
 For signed mode, set VERIFY_CALLBACK_SIGNATURE=true and use the same APP_ID and
 APP_SECRET as the server. Serialize once, sign those bytes, and send them unchanged.
 """
+import base64
 import hashlib
 import hmac
 import json
@@ -85,7 +86,7 @@ time.sleep(1.1)
 refreshed = success("/api/updateSSToken", encode({"ss_token": token["ss_token"]}))
 check(refreshed["expire_date"] > token["expire_date"], "Extended expiry")
 for path, field in [("/api/getSSToken", "code"), ("/api/updateSSToken", "ss_token")]:
-    error = rejected(path, encode({field: "invalid-token"}), 400)
+    error = rejected(path, encode({field: "invalid-token"}), 200)
     check(error["sdk_error_code"] == 1002, "SDK verification remains active")
     for value in ({}, {field: None}, {field: " "}, {field: 123}, {field: []}):
         rejected(path, encode(value), 400)
@@ -115,3 +116,15 @@ else:
     success("/api/getSSToken", raw, headers={"Sud-Signature": "invalid"})
 print("All HTTP checks passed (signature verification " + ("enabled" if SIGNED else "disabled") + ").")
 print("Secrets and tokens were not printed.")
+
+# Create an independently signed, expired JWT to assert the business-error contract.
+if APP_ID and SECRET:
+    def b64(value):
+        return base64.urlsafe_b64encode(value).rstrip(b"=")
+    content = b64(encode({"alg": "HS256", "typ": "JWT"})) + b"." + b64(
+        encode({"uid": "test-user-001", "app_id": APP_ID, "exp": 1}))
+    expired = (content + b"." + b64(hmac.new(SECRET.encode(), content, hashlib.sha256).digest())).decode()
+    for path, field in [("/api/getSSToken", "code"), ("/api/updateSSToken", "ss_token")]:
+        error = rejected(path, encode({field: expired}), 200)
+        check(error == {"ret_code": 1, "ret_msg": "", "sdk_error_code": 1005, "data": {}},
+              "Expired token returns HTTP 200 with SDK 1005")

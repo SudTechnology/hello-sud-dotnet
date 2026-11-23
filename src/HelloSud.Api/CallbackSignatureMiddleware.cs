@@ -1,19 +1,16 @@
-using System.Security.Cryptography;
-using System.Text;
+using Sud.Gip.Api;
 
 /// <summary>Optional request authentication before JSON binding or SDK calls.</summary>
 public sealed class CallbackSignatureMiddleware
 {
     private readonly RequestDelegate next;
-    private readonly string appId;
-    private readonly byte[] secret;
+    private readonly RequestSigner signer;
     private readonly bool enabled;
 
-    public CallbackSignatureMiddleware(RequestDelegate next, IConfiguration configuration)
+    public CallbackSignatureMiddleware(RequestDelegate next, IConfiguration configuration, RequestSigner signer)
     {
         this.next = next;
-        appId = configuration["APP_ID"]!;
-        secret = Encoding.UTF8.GetBytes(configuration["APP_SECRET"]!);
+        this.signer = signer;
         enabled = configuration.GetValue<bool>("VERIFY_CALLBACK_SIGNATURE");
     }
 
@@ -54,21 +51,20 @@ public sealed class CallbackSignatureMiddleware
 
     private bool Verify(HttpRequest request, byte[] body)
     {
-        var id = request.Headers["Sud-AppId"].ToString();
-        var timestamp = request.Headers["Sud-Timestamp"].ToString();
-        var nonce = request.Headers["Sud-Nonce"].ToString();
-        var signature = request.Headers["Sud-Signature"].ToString();
-        if (id != appId || string.IsNullOrWhiteSpace(timestamp) || string.IsNullOrWhiteSpace(nonce)
-            || signature.Length != 40 || signature.Any(c => !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f')))
+        // Reject ambiguous duplicate headers in the HTTP adapter.
+        foreach (var name in new[] { "Sud-AppId", "Sud-Timestamp", "Sud-Nonce", "Sud-Signature" })
         {
-            return false;
+            if (request.Headers[name].Count != 1)
+            {
+                return false;
+            }
         }
-
-        using var hmac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA1, secret);
-        hmac.AppendData(Encoding.UTF8.GetBytes($"{id}\n{timestamp}\n{nonce}\n"));
-        hmac.AppendData(body);
-        // Append the protocol newline without removing any newline already present in the body.
-        hmac.AppendData(new byte[] { (byte)'\n' });
-        return CryptographicOperations.FixedTimeEquals(hmac.GetHashAndReset(), Convert.FromHexString(signature));
+        // Pass the ORIGINAL received bytes unchanged; the SDK owns all HMAC operations.
+        return signer.VerifySignature(
+            request.Headers["Sud-AppId"].ToString(),
+            request.Headers["Sud-Timestamp"].ToString(),
+            request.Headers["Sud-Nonce"].ToString(),
+            body,
+            request.Headers["Sud-Signature"].ToString());
     }
 }
